@@ -4,6 +4,7 @@
 
 #pragma once
 
+class CDataTipWnd;
 
 // CDataTipDemoDlg dialog
 class CDataTipDemoDlg : public CDialogEx
@@ -24,6 +25,7 @@ public:
 // Implementation
 protected:
 	HICON m_hIcon;
+	CDataTipWnd* m_pDataTip;
 
 	// Generated message map functions
 	virtual BOOL OnInitDialog();
@@ -31,4 +33,6 @@ protected:
 	afx_msg void OnPaint();
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
+public:
+	afx_msg void OnMouseMove(UINT nFlags, CPoint point);
 };

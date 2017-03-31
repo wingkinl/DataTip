@@ -6,6 +6,7 @@
 #include "DataTipDemo.h"
 #include "DataTipDemoDlg.h"
 #include "afxdialogex.h"
+#include "DataTipWnd.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -53,6 +54,7 @@ CDataTipDemoDlg::CDataTipDemoDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_DATATIPDEMO_DIALOG, pParent)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
+	m_pDataTip = nullptr;
 }
 
 void CDataTipDemoDlg::DoDataExchange(CDataExchange* pDX)
@@ -64,6 +66,7 @@ BEGIN_MESSAGE_MAP(CDataTipDemoDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
+	ON_WM_MOUSEMOVE()
 END_MESSAGE_MAP()
 
 
@@ -152,3 +155,25 @@ HCURSOR CDataTipDemoDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+
+
+void CDataTipDemoDlg::OnMouseMove(UINT nFlags, CPoint point)
+{
+	CRect rect;
+	CWnd* pWnd = GetDlgItem(IDC_STATIC);
+	pWnd->GetWindowRect(rect);
+	ScreenToClient(rect);
+	if (rect.PtInRect(point))
+	{
+		if (!m_pDataTip)
+		{
+			m_pDataTip = new CDataTipWnd;
+			m_pDataTip->Create(this, WS_POPUP|WS_VISIBLE);
+		}
+		else
+		{
+			m_pDataTip->Show(point);
+		}
+	}
+	CDialogEx::OnMouseMove(nFlags, point);
+}

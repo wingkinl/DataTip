@@ -7,6 +7,7 @@
 #include "DataTipDemoDlg.h"
 #include "afxdialogex.h"
 #include "DataTipWnd.h"
+using namespace DataTip;
 
 #ifdef _DEBUG
 #define new DEBUG_NEW

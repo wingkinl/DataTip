@@ -4,7 +4,9 @@
 
 #pragma once
 
+namespace DataTip{
 class CDataTipWnd;
+}
 
 // CDataTipDemoDlg dialog
 class CDataTipDemoDlg : public CDialogEx
@@ -25,7 +27,7 @@ public:
 // Implementation
 protected:
 	HICON m_hIcon;
-	CDataTipWnd* m_pDataTip;
+	DataTip::CDataTipWnd* m_pDataTip;
 
 	// Generated message map functions
 	virtual BOOL OnInitDialog();

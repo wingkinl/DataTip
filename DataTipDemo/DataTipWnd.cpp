@@ -7,6 +7,14 @@
 
 namespace DataTip {
 
+enum
+{
+	DTMETRICS_ITEMHEIGHT	= 20,
+	DTMETRICS_BUTTONBOUNDS	= 20,
+	DTMETRICS_ICONBOUNDS	= 20,
+	DTMETRICS_ICONSIZE		= 16,
+};
+
 // CDataTipWnd
 
 IMPLEMENT_DYNAMIC(CDataTipWnd, CDataTipWndBase)
@@ -17,6 +25,7 @@ CDataTipWnd::CDataTipWnd()
 	m_szItem = m_szExpand = CSize(0, 0);
 	m_nFirstVisibleChild = 0;
 	m_pItemData = nullptr;
+	m_pTopItem = nullptr;
 	m_pCtrlData = nullptr;
 }
 
@@ -24,9 +33,10 @@ CDataTipWnd::~CDataTipWnd()
 {
 	if (IsRootWindow())
 	{
-		// TODO
 		delete m_pItemData;
+		m_pItemData = nullptr;
 		delete m_pCtrlData;
+		m_pCtrlData = nullptr;
 	}
 }
 
@@ -56,12 +66,7 @@ void CDataTipWnd::Show(const CPoint& pt)
 
 void CDataTipWnd::Pop()
 {
-	ASSERT(m_pCtrlData);
-	for (INT_PTR ii = m_pCtrlData->arrPopupWnds.GetSize()-1; ii >= 0; --ii)
-	{
-		m_pCtrlData->arrPopupWnds[ii]->DestroyWindow();
-	}
-	GetRootWindow()->DestroyWindow();
+	DestroyWindow();
 }
 
 HDTITEM CDataTipWnd::GetNextItem(HDTITEM hItem, DTGetNextItem nCode) const
@@ -85,7 +90,7 @@ HDTITEM CDataTipWnd::GetNextItem(HDTITEM hItem, DTGetNextItem nCode) const
 HDTITEM CDataTipWnd::GetChildItem(HDTITEM hItem) const
 {
 	auto pItem = ItemDataFromHandle(hItem);
-	return HandleFromItemData(pItem ? pItem->pChild : nullptr);
+	return HandleFromItemData(pItem ? pItem->pFirstChild : nullptr);
 }
 
 HDTITEM CDataTipWnd::GetNextSiblingItem(HDTITEM hItem) const
@@ -190,13 +195,13 @@ BOOL CDataTipWnd::SetItem(HDTITEM hItem, UINT nMask, LPCTSTR lpszName, LPCTSTR l
 	{
 		if (!lpszName)
 			return FALSE;
-		pItemData->strName = lpszName;
+		pItemData->SetName(lpszName);
 	}
 	if (nMask & DTIF_VALUE)
 	{
 		if (!lpszValue)
 			return FALSE;
-		pItemData->strValue = lpszValue;
+		pItemData->SetValue(lpszValue);
 	}
 	if (nMask & DTIF_IMAGE)
 		pItemData->nImage = nImage;
@@ -211,7 +216,7 @@ BOOL CDataTipWnd::SetItemName(HDTITEM hItem, LPCTSTR lpszName)
 	auto pItemData = ItemDataFromHandle(hItem);
 	if (!pItemData)
 		return FALSE;
-	pItemData->strName = lpszName;
+	pItemData->SetName(lpszName);
 	AdjustLayout(pItemData);
 	return TRUE;
 }
@@ -221,7 +226,7 @@ BOOL CDataTipWnd::SetItemValue(HDTITEM hItem, LPCTSTR lpszValue)
 	auto pItemData = ItemDataFromHandle(hItem);
 	if (!pItemData)
 		return FALSE;
-	pItemData->strValue = lpszValue;
+	pItemData->SetValue(lpszValue);
 	AdjustLayout(pItemData);
 	return TRUE;
 }
@@ -256,6 +261,11 @@ int CDataTipWnd::GetItemChildrenCount(HDTITEM hItem) const
 
 void CDataTipWnd::SetItemChildrenCount(HDTITEM hItem, int nCount)
 {
+	if (!IsOwnerData())
+	{
+		ASSERT(0);
+		return;
+	}
 	auto pItemData = ItemDataFromHandle(hItem);
 	if (!pItemData)
 		return;
@@ -311,19 +321,95 @@ COLORREF CDataTipWnd::SetTextColor(COLORREF clr)
 HDTITEM CDataTipWnd::InsertItem(LPCTSTR lpszName, LPCTSTR lpszValue, 
 	HDTITEM hParent, HDTITEM hInsertAfter)
 {
-	// TODO
-	return nullptr;
+	auto pParentItemData = ItemDataFromHandle(hParent);
+	if (!pParentItemData || !hInsertAfter)
+	{
+		ASSERT(0);
+		return nullptr;
+	}
+	if (pParentItemData->nChildren == I_CHILDRENCALLBACK)
+	{
+		ASSERT(0);
+		return nullptr;
+	}
+	ItemData* pNewItem = new ItemData;
+	pNewItem->SetName(lpszName);
+	pNewItem->SetValue(lpszValue);
+	if (hInsertAfter == DTI_ROOT)
+	{
+		// Add the item as a root item.
+		CDataTipWnd* pRootWnd = GetRootWindow();
+		ASSERT(pRootWnd);
+		if (pRootWnd->m_pItemData)
+		{
+			pRootWnd->m_pItemData->pParent = pNewItem;
+			pNewItem->pFirstChild = pRootWnd->m_pItemData;
+		}
+		pRootWnd->m_pItemData = pNewItem;
+	}
+	else if (hInsertAfter == DTI_FIRST)
+	{
+		// Inserts the item at the beginning of the list.
+		if (pParentItemData->pFirstChild)
+		{
+			pParentItemData->pFirstChild->pPrev = pNewItem;
+		}
+		pNewItem->pNext = pParentItemData->pFirstChild;
+		pParentItemData->pFirstChild = pNewItem;
+	}
+	else if (hInsertAfter == DTI_LAST)
+	{
+		// Inserts the item at the end of the list.
+		if (pParentItemData->pFirstChild)
+		{
+			ItemData* pLastItem = pParentItemData->pFirstChild;
+			while (pLastItem->pNext)
+			{
+				pLastItem = pLastItem->pNext;
+			}
+			pLastItem->pNext = pNewItem;
+			pNewItem->pPrev = pLastItem;
+		}
+		else
+		{
+			pParentItemData->pFirstChild = pNewItem;
+		}
+	}
+	else
+	{
+		auto pInsertAfterItem = ItemDataFromHandle(hInsertAfter);
+		if (!pInsertAfterItem)
+		{
+			ASSERT(0);
+			delete pNewItem;
+			return nullptr;
+		}
+		pInsertAfterItem->pNext = pNewItem;
+		pNewItem->pPrev = pInsertAfterItem;
+	}
+	AdjustLayout(pParentItemData);
+	return HandleFromItemData(pNewItem);
 }
 
 BOOL CDataTipWnd::DeleteItem(HDTITEM hItem)
 {
-	// TODO
+	auto pItem = ItemDataFromHandle(hItem);
+	if (!pItem)
+	{
+		ASSERT(0);
+		return FALSE;
+	}
+	delete pItem;
 	return TRUE;
 }
 
 BOOL CDataTipWnd::DeleteAllItems()
 {
-	// TODO
+	auto hRoot = GetRootItem();
+	if (hRoot)
+	{
+		delete ItemDataFromHandle(hRoot);
+	}
 	return TRUE;
 }
 
@@ -346,14 +432,109 @@ BOOL CDataTipWnd::Expand(HDTITEM hItem, DTExpand exp)
 		if (pItemData->pWnd)
 			pItemData->pWnd->m_dwFlags &= ~FlagsExpand;
 	}
-	// TODO
+	AdjustLayout(pItemData);
 	return TRUE;
 }
 
-HDTITEM CDataTipWnd::HitTest(CPoint pt, DTHitTest* pArea) const
+HDTITEM CDataTipWnd::HitTest(CPoint pt, UINT* pFlags) const
 {
-	// TODO
+	CRect rect(0,0,0,0);
+	GetClientRect(rect);
+	if (!rect.PtInRect(pt))
+	{
+		if (pFlags)
+		{
+			*pFlags = 0;
+			if (pt.x < rect.left)
+				*pFlags |= DTHT_TOLEFT;
+			if (pt.x > rect.right)
+				*pFlags |= DTHT_TORIGHT;
+			if (pt.y < rect.top)
+				*pFlags |= DTHT_ABOVE;
+			if (pt.y > rect.bottom)
+				*pFlags |= DTHT_BELOW;
+		}
+		return nullptr;
+	}
+	return HitTestOnClientItem(pt, pFlags);
+}
+
+void CDataTipWnd::GetItemsRect(LPRECT lpRect) const
+{
+	GetClientRect(lpRect);
+}
+
+HDTITEM CDataTipWnd::HitTestOnClientItem(CPoint pt, UINT* pFlags) const
+{
+	CRect rect(0, 0, 0, 0);
+	GetItemsRect(rect);
+	SHORT nItemHeight = GetItemHeight();
+	auto pItemTest = m_pTopItem;
+	int nItemCount = 1;
+	while (pItemTest && nItemCount <= m_pCtrlData->nMaxDisplayItems)
+	{
+		LONG nItemBottom = rect.top + nItemHeight;
+		if (pt.y >= rect.top && pt.y < nItemBottom)
+		{
+			if (pFlags)
+			{
+				LONG left = rect.left;
+				if (pt.x < (left += DTMETRICS_BUTTONBOUNDS))
+					*pFlags = DTHT_ONITEMBUTTON;
+				else if (pt.x < (left += DTMETRICS_ICONBOUNDS))
+					*pFlags = DTHT_ONITEMICON;
+				else if (pt.x < (left += m_nNameDisplayWidth))
+					*pFlags = DTHT_ONITEMNAME;
+				else
+					*pFlags = DTHT_ONITEMVALUE;
+			}
+			return HandleFromItemData(pItemTest);
+		}
+		rect.top = nItemBottom;
+		pItemTest = pItemTest->pNext;
+		++nItemCount;
+	}
+	if (pFlags)
+		*pFlags = DTHT_NOWHERE;
 	return nullptr;
+}
+
+BOOL CDataTipWnd::GetItemRect(HDTITEM hItem, LPRECT lpRect, int nPart) const
+{
+	auto pItemData = ItemDataFromHandle(hItem);
+	if (!pItemData)
+		return FALSE;
+	if (!pItemData->pWnd)
+	{
+		ASSERT(0);
+		return FALSE;
+	}
+	return pItemData->pWnd->GetItemRectImpl(pItemData, lpRect, nPart);
+}
+
+BOOL CDataTipWnd::GetItemRectImpl(ItemData* pItem, LPRECT lpRect, int nPart) const
+{
+	ASSERT(pItem && pItem->pWnd == this && lpRect);
+	GetItemsRect(lpRect);
+	SHORT nItemHeight = GetItemHeight();
+	auto pItemTest = m_pTopItem;
+	int nItemCount = 1;
+	while (pItemTest && nItemCount <= m_pCtrlData->nMaxDisplayItems)
+	{
+		LONG nItemBottom = lpRect->top + nItemHeight;
+		if (pItemTest == pItem)
+		{
+			lpRect->bottom = nItemBottom;
+			switch (nPart)
+			{
+			}
+			return TRUE;
+		}
+		lpRect->top = nItemBottom;
+		pItemTest = pItemTest->pNext;
+		++nItemCount;
+	}
+	return FALSE;
 }
 
 CImageList* CDataTipWnd::SetImageList(CImageList* pImageList)

@@ -61,6 +61,20 @@ enum DTHitTest
 	DTHT_ONITEMBUTTON       = 0x0010,
 	DTHT_ONITEMLABEL        = (DTHT_ONITEMNAME | DTHT_ONITEMVALUE),
 	DTHT_ONITEM             = (DTHT_ONITEMBUTTON | DTHT_ONITEMICON | DTHT_ONITEMLABEL),
+
+	DTHT_ABOVE              = 0x0100,
+	DTHT_BELOW              = 0x0200,
+	DTHT_TORIGHT            = 0x0400,
+	DTHT_TOLEFT             = 0x0800,
+};
+
+enum DTPart
+{
+	DTP_BUTTON,
+	DTP_IMAGE,
+	DTP_NAME,
+	DTP_VALUE,
+	DTP_BOUNDS,
 };
 
 enum DTExpand
@@ -176,7 +190,10 @@ public:
 
 	// Determines the visual feature of the control under
 	// the specified point.
-	HDTITEM HitTest(CPoint pt, DTHitTest* pArea = NULL) const;
+	virtual HDTITEM HitTest(CPoint pt, UINT* pFlags = NULL) const;
+
+	// Retrieves the bounding rectangle for a specified part of a specified item
+	BOOL GetItemRect(HDTITEM hItem, LPRECT lpRect, int nPart) const;
 
 	CImageList* SetImageList(CImageList* pImageList);
 protected:
@@ -201,6 +218,10 @@ protected:
 	virtual void AdjustLayout();
 	
 	void Redraw();
+
+	virtual HDTITEM HitTestOnClientItem(CPoint pt, UINT* pFlags) const;
+
+	virtual void GetItemsRect(LPRECT lpRect) const;
 protected:
 	enum
 	{
@@ -211,6 +232,7 @@ protected:
 	// for display
 	CSize		m_szItem;		// unexpanded
 	CSize		m_szExpand;		// contains children
+	int			m_nNameDisplayWidth;
 	int			m_nFirstVisibleChild;
 	
 	// data of individual item
@@ -218,8 +240,9 @@ protected:
 	{
 		enum Flags
 		{
-			FlagsNeedTextCallback		= 0x00010000,
-			FlagsExpand					= 0x00000001,
+			FlagsNameCallback		= 0x00010000,
+			FlagsValueCallback		= 0x00020000,
+			FlagsExpand				= 0x00000001,
 		};
 		DWORD			dwFlags;
 		CString			strName;
@@ -228,9 +251,9 @@ protected:
 		int				nChildren;
 		LPARAM			lParam;
 		ItemData*		pParent;
-		ItemData*		pChild;		// the first child
-		ItemData*		pNext;
-		ItemData*		pPrev;
+		ItemData*		pFirstChild;// the first child
+		ItemData*		pNext;		// next sibling
+		ItemData*		pPrev;		// previous sibling
 		CDataTipWnd*	pWnd;
 
 		ItemData()
@@ -239,11 +262,69 @@ protected:
 			nImage = I_IMAGENONE;
 			nChildren = 0;
 			lParam = 0;
-			pParent = pChild = pNext = pPrev = nullptr;
+			pParent = pFirstChild = pNext = pPrev = nullptr;
 			pWnd = nullptr;
+		}
+		~ItemData()
+		{
+			if (pWnd)
+			{
+				pWnd->m_pItemData = nullptr;
+				pWnd->DestroyWindow();
+				pWnd = nullptr;
+			}
+			if (pPrev)
+				pPrev->pNext = pNext;
+			if (pNext)
+				pNext->pPrev = pPrev;
+			if (pParent)
+			{
+				--pParent->nChildren;
+				ASSERT(pParent->nChildren >= 0);
+				if (pParent->pFirstChild == this)
+					pParent->pFirstChild = pNext;
+			}
+			if (pFirstChild)
+			{
+				ItemData* pNextChild = pFirstChild;
+				while (pNextChild)
+				{
+					ItemData* pDelete = pNextChild;
+					pNextChild = pNextChild->pNext;
+					delete pDelete;
+				}
+			}
+		}
+		
+		void SetName(LPCTSTR pszName)
+		{
+			if (pszName == LPSTR_TEXTCALLBACK)
+			{
+				dwFlags |= FlagsNameCallback;
+				strName.Empty();
+			}
+			else
+			{
+				dwFlags &= ~FlagsNameCallback;
+				strName = pszName;
+			}
+		}
+		void SetValue(LPCTSTR pszName)
+		{
+			if (pszName == LPSTR_TEXTCALLBACK)
+			{
+				dwFlags |= FlagsValueCallback;
+				strValue.Empty();
+			}
+			else
+			{
+				dwFlags &= ~FlagsValueCallback;
+				strValue = pszName;
+			}
 		}
 	};
 	ItemData*	m_pItemData;
+	ItemData*	m_pTopItem;
 
 	// data of the whole control, shared across all items
 	struct CtrlData 
@@ -253,15 +334,18 @@ protected:
 		DataTipWnds		arrPopupWnds;
 		CImageList*		pImageList;
 		SHORT			nItemHeight;
-		int				nMaxDisplayHeight;
+		int				nMaxDisplayItems;
 		int				nMaxValueDisplayWidth;
 		COLORREF		clrBack;
 		COLORREF		clrText;
+		CSize			szIcon;
 	};
 	CtrlData*	m_pCtrlData;
 protected:
-	inline static ItemData*	ItemDataFromHandle(HDTITEM hItem)
+	inline ItemData*	ItemDataFromHandle(HDTITEM hItem) const
 	{
+		if (hItem == DTI_ROOT)
+			hItem = GetRootItem();
 		return reinterpret_cast<ItemData*>(hItem);
 	}
 	inline static HDTITEM HandleFromItemData(ItemData* pItem)
@@ -273,6 +357,8 @@ protected:
 		if (pItemData && pItemData->pWnd)
 			pItemData->pWnd->AdjustLayout();
 	}
+
+	BOOL GetItemRectImpl(ItemData* pItem, LPRECT lpRect, int nPart) const;
 protected:
 
 	DECLARE_MESSAGE_MAP()

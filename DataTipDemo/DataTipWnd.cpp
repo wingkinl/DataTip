@@ -23,7 +23,7 @@ CDataTipWnd::CDataTipWnd()
 {
 	m_dwFlags = FlagsAutoDeleteOnDestroy;
 	m_szItem = m_szExpand = CSize(0, 0);
-	m_nFirstVisibleChild = 0;
+	m_nNameDisplayWidth = -1;
 	m_pItemData = nullptr;
 	m_pTopItem = nullptr;
 	m_pCtrlData = nullptr;
@@ -527,6 +527,22 @@ BOOL CDataTipWnd::GetItemRectImpl(ItemData* pItem, LPRECT lpRect, int nPart) con
 			lpRect->bottom = nItemBottom;
 			switch (nPart)
 			{
+			case DTP_BUTTON:
+				lpRect->right = lpRect->left + DTMETRICS_BUTTONBOUNDS;
+				break;
+			case DTP_IMAGE:
+				lpRect->left += DTMETRICS_BUTTONBOUNDS;
+				lpRect->right = lpRect->left + DTMETRICS_ICONBOUNDS;
+				break;
+			case DTP_NAME:
+				lpRect->left += DTMETRICS_BUTTONBOUNDS + DTMETRICS_ICONBOUNDS;
+				lpRect->right = lpRect->left + m_nNameDisplayWidth;
+				break;
+			case DTP_VALUE:
+				lpRect->left += DTMETRICS_BUTTONBOUNDS + DTMETRICS_ICONBOUNDS + m_nNameDisplayWidth;
+				break;
+			case DTP_BOUNDS:
+				break;
 			}
 			return TRUE;
 		}

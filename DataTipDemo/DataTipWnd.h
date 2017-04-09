@@ -226,14 +226,16 @@ protected:
 	enum
 	{
 		FlagsAutoDeleteOnDestroy	= 0x00000001,
-		FlagsExpand					= 0x00000002,
+		FlagsOwnsItemData			= 0x00000002,
+		FlagsExpand					= 0x00000004,
 	};
 	DWORD		m_dwFlags;
 	// for display
 	CSize		m_szItem;		// unexpanded
 	CSize		m_szExpand;		// contains children
-	int			m_nNameDisplayWidth;
-	int			m_nFirstVisibleChild;
+	int			m_nNameDisplayWidth;	// auto-expand during scrolling
+	// for use when the window does not own the item data
+	int			m_nFirstVisibleIndex;
 	
 	// data of individual item
 	struct ItemData 
@@ -323,8 +325,8 @@ protected:
 			}
 		}
 	};
-	ItemData*	m_pItemData;
-	ItemData*	m_pTopItem;
+	ItemData*	m_pItemData;	// the first item, not necessarily the first visible one
+	ItemData*	m_pTopItem;		// the first visible item
 
 	// data of the whole control, shared across all items
 	struct CtrlData 
